@@ -101,13 +101,13 @@ class Area(AreaBase, Mark):
     .. include:: ../docstrings/objects.Area.rst
 
     """
-    color: MappableColor = Mappable("C0", )
-    alpha: MappableFloat = Mappable(.2, )
-    fill: MappableBool = Mappable(True, )
+    color: MappableColor = Mappable("C0")
+    alpha: MappableFloat = Mappable(.2)
+    fill: MappableBool = Mappable(True)
     edgecolor: MappableColor = Mappable(depend="color")
-    edgealpha: MappableFloat = Mappable(1, )
-    edgewidth: MappableFloat = Mappable(rc="patch.linewidth", )
-    edgestyle: MappableStyle = Mappable("-", )
+    edgealpha: MappableFloat = Mappable(1)
+    edgewidth: MappableFloat = Mappable(rc="patch.linewidth")
+    edgestyle: MappableStyle = Mappable("-")
 
     # TODO should this be settable / mappable?
     baseline: MappableFloat = Mappable(0, grouping=False)
@@ -117,21 +117,7 @@ class Area(AreaBase, Mark):
         return data.rename(columns={"baseline": f"{dv}min", dv: f"{dv}max"})
 
     def _postprocess_artist(self, artist, ax, orient):
-
-        # TODO copying a lot of code from Bar, let's abstract this
-        # See comments there, I am not going to repeat them too
-
-        artist.set_linewidth(artist.get_linewidth() * 2)
-
-        linestyle = artist.get_linestyle()
-        if linestyle[1]:
-            linestyle = (linestyle[0], tuple(x / 2 for x in linestyle[1]))
-        artist.set_linestyle(linestyle)
-
-        artist.set_clip_path(artist.get_path(), artist.get_transform() + ax.transData)
-        if self.artist_kws.get("clip_on", True):
-            artist.set_clip_box(ax.bbox)
-
+        self._clip_edges(artist, ax)
         val_idx = ["y", "x"].index(orient)
         artist.sticky_edges[val_idx][:] = (0, np.inf)
 
@@ -151,13 +137,13 @@ class Band(AreaBase, Mark):
     .. include:: ../docstrings/objects.Band.rst
 
     """
-    color: MappableColor = Mappable("C0", )
-    alpha: MappableFloat = Mappable(.2, )
-    fill: MappableBool = Mappable(True, )
-    edgecolor: MappableColor = Mappable(depend="color", )
-    edgealpha: MappableFloat = Mappable(1, )
-    edgewidth: MappableFloat = Mappable(0, )
-    edgestyle: MappableFloat = Mappable("-", )
+    color: MappableColor = Mappable("C0")
+    alpha: MappableFloat = Mappable(.2)
+    fill: MappableBool = Mappable(True)
+    edgecolor: MappableColor = Mappable(depend="color")
+    edgealpha: MappableFloat = Mappable(1)
+    edgewidth: MappableFloat = Mappable(0)
+    edgestyle: MappableFloat = Mappable("-")
 
     def _standardize_coordinate_parameters(self, data, orient):
         # dv = {"x": "y", "y": "x"}[orient]

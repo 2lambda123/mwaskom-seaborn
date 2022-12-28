@@ -1,9 +1,11 @@
 from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 import matplotlib as mpl
+from matplotlib.artist import Artist
 
 from seaborn._marks.base import (
     Mark,
@@ -16,13 +18,8 @@ from seaborn._marks.base import (
     resolve_color,
     document_properties
 )
+from seaborn._core.scales import Scale
 from seaborn.external.version import Version
-
-from typing import TYPE_CHECKING
-if TYPE_CHECKING:
-    from typing import Any
-    from matplotlib.artist import Artist
-    from seaborn._core.scales import Scale
 
 
 class BarBase(Mark):
@@ -140,26 +137,7 @@ class Bar(BarBase):
 
             for bar in bars:
 
-                # Because we are clipping the artist (see below), the edges end up
-                # looking half as wide as they actually are. I don't love this clumsy
-                # workaround, which is going to cause surprises if you work with the
-                # artists directly. We may need to revisit after feedback.
-                bar.set_linewidth(bar.get_linewidth() * 2)
-                linestyle = bar.get_linestyle()
-                if linestyle[1]:
-                    linestyle = (linestyle[0], tuple(x / 2 for x in linestyle[1]))
-                bar.set_linestyle(linestyle)
-
-                # This is a bit of a hack to handle the fact that the edge lines are
-                # centered on the actual extents of the bar, and overlap when bars are
-                # stacked or dodged. We may discover that this causes problems and needs
-                # to be revisited at some point. Also it should be faster to clip with
-                # a bbox than a path, but I cant't work out how to get the intersection
-                # with the axes bbox.
-                bar.set_clip_path(bar.get_path(), bar.get_transform() + ax.transData)
-                if self.artist_kws.get("clip_on", True):
-                    # It seems the above hack undoes the default axes clipping
-                    bar.set_clip_box(ax.bbox)
+                self._clip_edges(bar, ax)
                 bar.sticky_edges[val_idx][:] = (0, np.inf)
                 ax.add_patch(bar)
 
@@ -248,3 +226,71 @@ class Bars(BarBase):
             linewidth = min(.1 * min_width, mpl.rcParams["patch.linewidth"])
             for _, col in collections.items():
                 col.set_linewidth(linewidth)
+
+
+@document_properties
+@dataclass
+class Box(BarBase):
+    """
+    An oriented rectangular mark drawn between min/max values.
+
+    Examples
+    --------
+    .. include:: ../docstrings/objects.Box.rst
+
+    """
+    color: MappableColor = Mappable("C0")
+    alpha: MappableFloat = Mappable(.7)
+    fill: MappableBool = Mappable(True)
+    edgecolor: MappableColor = Mappable(depend="color")
+    edgealpha: MappableFloat = Mappable(1)
+    edgewidth: MappableFloat = Mappable(rc="patch.linewidth")
+    edgestyle: MappableFloat = Mappable("-")
+    width: MappableFloat = Mappable(0.8, grouping=False)
+
+    def _plot(self, split_gen, scales, orient):
+
+        patches = defaultdict(list)
+
+        for keys, data, ax in split_gen():
+
+            kws = {}
+
+            resolved = self._resolve_properties(keys, scales)
+
+            kws["facecolor"] = resolved["facecolor"]
+            kws["edgecolor"] = resolved["edgecolor"]
+            kws["linewidth"] = resolved["edgewidth"]
+            kws["linestyle"] = resolved["edgestyle"]
+
+            other = {"x": "y", "y": "x"}[orient]
+
+            if not set(data.columns) & {f"{other}min", f"{other}max"}:
+                agg = {f"{other}min": (other, "min"), f"{other}max": (other, "max")}
+                data = data.groupby([orient, "width"]).agg(**agg).reset_index()
+
+            for row in data.itertuples():
+
+                if orient == "x":
+
+                    verts = np.array([
+                        row.x - row.width / 2, row.ymin,
+                        row.x + row.width / 2, row.ymin,
+                        row.x + row.width / 2, row.ymax,
+                        row.x - row.width / 2, row.ymax,
+                    ]).reshape((4, 2))
+                else:
+                    verts = np.array([
+                        row.xmin, row.y - row.width / 2,
+                        row.xmax, row.y - row.width / 2,
+                        row.xmax, row.y + row.width / 2,
+                        row.xmin, row.y + row.width / 2,
+                    ]).reshape((4, 2))
+
+                patches[ax].append(mpl.patches.Polygon(verts, **kws))
+                ax.update_datalim(verts)
+
+        for ax, ax_patches in patches.items():
+            for patch in ax_patches:
+                self._clip_edges(patch, ax)
+                ax.add_patch(patch)
